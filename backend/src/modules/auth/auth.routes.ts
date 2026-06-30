@@ -12,5 +12,6 @@ router.post('/register', authLimiter, validate(registerSchema), asyncHandler(aut
 router.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
 router.post('/logout', asyncHandler(authController.logout));
 router.get('/me', authenticate, asyncHandler(authController.me));
+router.get('/socket-token', authenticate, asyncHandler(authController.socketToken));
 
 export default router;

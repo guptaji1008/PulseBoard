@@ -37,6 +37,7 @@ export const api = createApi({
       query: () => ({ url: '/auth/logout', method: 'POST' }),
     }),
     me: builder.query<User, void>({ query: () => '/auth/me' }),
+    getSocketToken: builder.query<{ token: string }, void>({ query: () => '/auth/socket-token' }),
 
     getProjects: builder.query<Project[], void>({
       query: () => '/projects',
@@ -112,6 +113,7 @@ export const {
   useLoginMutation,
   useLogoutApiMutation,
   useMeQuery,
+  useGetSocketTokenQuery,
   useGetProjectsQuery,
   useGetProjectQuery,
   useCreateProjectMutation,
