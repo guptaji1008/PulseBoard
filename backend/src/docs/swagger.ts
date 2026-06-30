@@ -3,7 +3,7 @@ const bearer = [{ bearerAuth: [] }];
 export const openapiSpec = {
   openapi: '3.0.3',
   info: {
-    title: 'Project & Task Management Platform API',
+    title: 'PulseBoard Platform API',
     version: '1.0.0',
     description: 'REST API for users, projects, tasks, search, and AI summaries.',
   },

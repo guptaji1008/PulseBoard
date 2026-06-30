@@ -210,8 +210,8 @@ The unit tests check the validation rules. The integration tests actually call t
 
 The frontend is deployed on Vercel and the backend on Render. *(Update these links once redeployed under the project's own name.)*
 
-- App: `<your-new-vercel-url>`
-- API: `<your-new-render-url>`
+- App: `https://pulse-board-fe.vercel.app`
+- API: `https://pulseboard-1uoa.onrender.com/api/docs`
 
 The two are tied together by two settings: the frontend's `VITE_API_URL` points at the Render API, and the backend's `CORS_ORIGIN` is set to the Vercel app URL so the browser is allowed to talk to it.
 
