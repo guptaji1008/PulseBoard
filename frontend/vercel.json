@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://task-manager-backend-3nt6.onrender.com/api/:path*"
+      "destination": "https://pulseboard-1uoa.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
