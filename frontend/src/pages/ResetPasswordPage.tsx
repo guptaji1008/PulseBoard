@@ -1,31 +1,31 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LayoutGrid } from 'lucide-react';
-import { useRegisterMutation } from '../services/api';
+import { ShieldCheck } from 'lucide-react';
+import { useResetPasswordMutation } from '../services/api';
 import Button from '../components/Button';
 import Spinner from '../components/Spinner';
-import { Label, Input, PasswordInput } from '../components/Field';
+import { Label, PasswordInput } from '../components/Field';
 
-export default function RegisterPage() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+export default function ResetPasswordPage() {
+  const token = useMemo(() => new URLSearchParams(window.location.search).get('token') ?? '', []);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [register, { isLoading }] = useRegisterMutation();
+  const [resetPassword, { isLoading }] = useResetPasswordMutation();
   const navigate = useNavigate();
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!token) return setError('Reset token is missing.');
     if (password.length < 6) return setError('Password must be at least 6 characters.');
     if (password !== confirmPassword) return setError('Passwords do not match.');
+
     try {
-      await register({ name, email, password }).unwrap();
-      navigate(`/verify-email?email=${encodeURIComponent(email)}`);
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      setError(status === 409 ? 'That email is already registered.' : 'Could not create your account.');
+      await resetPassword({ token, password }).unwrap();
+      navigate('/login');
+    } catch {
+      setError('That reset link is invalid or expired.');
     }
   };
 
@@ -34,25 +34,16 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-white">
-            <LayoutGrid size={22} />
+            <ShieldCheck size={22} />
           </span>
-          <h1 className="font-display text-2xl font-semibold">Create your account</h1>
-          <p className="mt-1 text-sm text-muted">Start managing projects in minutes</p>
+          <h1 className="font-display text-2xl font-semibold">Choose a new password</h1>
+          <p className="mt-1 text-sm text-muted">Your old sessions will be signed out</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-6">
           <div>
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div>
-            <Label>Password</Label>
-            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
-            <p className="mt-1 text-xs text-muted">At least 6 characters.</p>
+            <Label>New password</Label>
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />
           </div>
           <div>
             <Label>Confirm password</Label>
@@ -61,14 +52,14 @@ export default function RegisterPage() {
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button type="submit" disabled={isLoading} className="w-full">
             {isLoading && <Spinner />}
-            Create account
+            Reset password
           </Button>
         </form>
 
         <p className="mt-4 text-center text-sm text-muted">
-          Already have an account?{' '}
+          Back to{' '}
           <Link to="/login" className="font-medium text-brand hover:underline">
-            Log in
+            login
           </Link>
         </p>
       </div>

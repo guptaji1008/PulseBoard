@@ -10,7 +10,7 @@ export interface JwtPayload {
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   // Prefer HttpOnly cookie; fall back to Bearer header (used by Socket.IO and non-browser clients)
-  let token: string | undefined = req.cookies?.token;
+  let token: string | undefined = req.cookies?.accessToken ?? req.cookies?.token;
 
   if (!token) {
     const header = req.headers.authorization;

@@ -9,8 +9,13 @@ import { JwtPayload } from '../middleware/auth';
 let io: Server | null = null;
 
 export function initSocket(httpServer: HttpServer): Server {
+  const allowedOrigins = env.corsOrigin.split(',').map((origin) => origin.trim());
+
   io = new Server(httpServer, {
-    cors: { origin: env.corsOrigin },
+    cors: {
+      origin: allowedOrigins.includes('*') ? true : allowedOrigins,
+      credentials: true,
+    },
   });
 
   io.adapter(createAdapter(pubClient, subClient));
@@ -20,8 +25,10 @@ export function initSocket(httpServer: HttpServer): Server {
     let token = socket.handshake.auth?.token as string | undefined;
     if (!token) {
       const cookieHeader = socket.handshake.headers.cookie ?? '';
-      const match = cookieHeader.split(';').find((c) => c.trim().startsWith('token='));
-      token = match?.trim().slice('token='.length);
+      const cookies = cookieHeader.split(';').map((cookie) => cookie.trim());
+      const accessToken = cookies.find((cookie) => cookie.startsWith('accessToken='));
+      const legacyToken = cookies.find((cookie) => cookie.startsWith('token='));
+      token = accessToken?.slice('accessToken='.length) ?? legacyToken?.slice('token='.length);
     }
     if (!token) return next(new Error('Unauthorized'));
     try {

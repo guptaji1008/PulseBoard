@@ -15,9 +15,24 @@ const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> =
   apiCtx,
   extraOptions,
 ) => {
-  const result = await rawBaseQuery(args, apiCtx, extraOptions);
+  let result = await rawBaseQuery(args, apiCtx, extraOptions);
   if (result.error && result.error.status === 401) {
-    apiCtx.dispatch(logout());
+    const url = typeof args === 'string' ? args : args.url;
+    const isAuthEndpoint =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
+
+    if (!isAuthEndpoint) {
+      const refresh = await rawBaseQuery({ url: '/auth/refresh', method: 'POST' }, apiCtx, extraOptions);
+      if (!refresh.error) {
+        result = await rawBaseQuery(args, apiCtx, extraOptions);
+      } else {
+        apiCtx.dispatch(logout());
+      }
+    }
   }
   return result;
 };
@@ -30,6 +45,12 @@ export const api = createApi({
     register: builder.mutation<AuthResponse, { name: string; email: string; password: string }>({
       query: (body) => ({ url: '/auth/register', method: 'POST', body }),
     }),
+    verifyEmail: builder.mutation<AuthResponse & { message: string }, { email: string; otp: string }>({
+      query: (body) => ({ url: '/auth/verify-email', method: 'POST', body }),
+    }),
+    resendVerification: builder.mutation<{ message: string }, { email: string }>({
+      query: (body) => ({ url: '/auth/resend-verification', method: 'POST', body }),
+    }),
     login: builder.mutation<AuthResponse, { email: string; password: string }>({
       query: (body) => ({ url: '/auth/login', method: 'POST', body }),
     }),
@@ -38,6 +59,12 @@ export const api = createApi({
     }),
     me: builder.query<User, void>({ query: () => '/auth/me' }),
     getSocketToken: builder.query<{ token: string }, void>({ query: () => '/auth/socket-token' }),
+    forgotPassword: builder.mutation<{ message: string }, { email: string }>({
+      query: (body) => ({ url: '/auth/forgot-password', method: 'POST', body }),
+    }),
+    resetPassword: builder.mutation<{ message: string }, { token: string; password: string }>({
+      query: (body) => ({ url: '/auth/reset-password', method: 'POST', body }),
+    }),
 
     getProjects: builder.query<Project[], void>({
       query: () => '/projects',
@@ -110,10 +137,14 @@ export const api = createApi({
 
 export const {
   useRegisterMutation,
+  useVerifyEmailMutation,
+  useResendVerificationMutation,
   useLoginMutation,
   useLogoutApiMutation,
   useMeQuery,
   useGetSocketTokenQuery,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
   useGetProjectsQuery,
   useGetProjectQuery,
   useCreateProjectMutation,

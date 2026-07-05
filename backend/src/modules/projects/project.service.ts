@@ -1,16 +1,33 @@
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../utils/AppError';
+import { enqueueEmailNotification } from '../notifications/email.queue';
 
 export const projectService = {
   async create(userId: string, data: { name: string; description?: string }) {
-    return prisma.project.create({
-      data: {
-        name: data.name,
-        description: data.description,
-        ownerId: userId,
-        members: { create: { userId, role: 'OWNER' } },
-      },
-    });
+    const [project, owner] = await prisma.$transaction([
+      prisma.project.create({
+        data: {
+          name: data.name,
+          description: data.description,
+          ownerId: userId,
+          members: { create: { userId, role: 'OWNER' } },
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
+    ]);
+
+    if (owner) {
+      await enqueueEmailNotification({
+        type: 'project-created',
+        to: owner.email,
+        projectName: project.name,
+      });
+    }
+
+    return project;
   },
 
   async listForUser(userId: string) {
@@ -58,14 +75,34 @@ export const projectService = {
   },
 
   async addMember(userId: string, projectId: string, email: string) {
-    await this.assertOwner(userId, projectId);
-    const user = await prisma.user.findUnique({ where: { email } });
+    const project = await this.assertOwner(userId, projectId);
+    const [user, owner] = await Promise.all([
+      prisma.user.findUnique({ where: { email } }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      }),
+    ]);
     if (!user) throw new AppError(404, 'No user found with that email');
-    return prisma.projectMember.upsert({
+
+    const existingMember = await prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId: user.id } },
-      update: {},
-      create: { projectId, userId: user.id, role: 'MEMBER' },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
+    if (existingMember) return existingMember;
+
+    const member = await prisma.projectMember.create({
+      data: { projectId, userId: user.id, role: 'MEMBER' },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    await enqueueEmailNotification({
+      type: 'project-member-added',
+      to: member.user.email,
+      recipientName: member.user.name,
+      projectName: project.name,
+      addedByName: owner?.name ?? 'A project owner',
+    });
+
+    return member;
   },
 };

@@ -39,7 +39,7 @@ export default function ProjectBoardPage() {
   // Real-time: join the project room and patch the task cache as events arrive.
   useEffect(() => {
     if (!projectId || !socketTokenData?.token) return;
-  const socket = getSocket(socketTokenData.token);
+    const socket = getSocket(socketTokenData.token);
 
     const patch = (recipe: (draft: Task[]) => void) =>
       dispatch(api.util.updateQueryData('getTasks', projectId, recipe));
@@ -79,7 +79,7 @@ export default function ProjectBoardPage() {
       socket.off('task:updated', onUpdated);
       socket.off('task:deleted', onDeleted);
     };
-  }, [projectId, dispatch]);
+  }, [projectId, socketTokenData?.token, dispatch]);
 
   const grouped = useMemo(() => {
     const map: Record<string, Task[]> = { TODO: [], IN_PROGRESS: [], DONE: [] };

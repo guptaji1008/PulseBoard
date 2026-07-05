@@ -6,12 +6,13 @@ import { useAppDispatch } from "../app/hooks";
 import { setCredentials } from "../features/auth/authSlice";
 import Button from "../components/Button";
 import Spinner from "../components/Spinner";
-import { Label, Input } from "../components/Field";
+import { Label, Input, PasswordInput } from "../components/Field";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [verifyEmail, setVerifyEmail] = useState("");
   const [login, { isLoading }] = useLoginMutation();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -19,11 +20,18 @@ export default function LoginPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    setVerifyEmail("");
     try {
       const res = await login({ email, password }).unwrap();
       dispatch(setCredentials({ user: res.user }));
       navigate("/");
-    } catch {
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      if (status === 403) {
+        setError("Verify your email before logging in.");
+        setVerifyEmail(email);
+        return;
+      }
       setError("Wrong email or password.");
     }
   };
@@ -55,14 +63,33 @@ export default function LoginPage() {
           </div>
           <div>
             <Label>Password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          <div className="text-right">
+            <Link to="/forgot-password" className="text-sm font-medium text-brand hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+          {error && (
+            <p className="text-sm text-rose-600">
+              {error}
+              {verifyEmail && (
+                <>
+                  {" "}
+                  <Link
+                    to={`/verify-email?email=${encodeURIComponent(verifyEmail)}`}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    Verify now
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
           <Button type="submit" disabled={isLoading} className="w-full">
             {isLoading && <Spinner />}
             Log in
