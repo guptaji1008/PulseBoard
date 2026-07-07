@@ -1,4 +1,7 @@
 import nodemailer from 'nodemailer';
+import dns from 'node:dns/promises';
+import net from 'node:net';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import { env } from '../../config/env';
 
 type MailContent = {
@@ -12,16 +15,37 @@ function canSendEmail() {
   return Boolean(env.smtpHost && env.smtpUser && env.smtpPass);
 }
 
-function getTransporter() {
-  return nodemailer.createTransport({
-    host: env.smtpHost,
+async function resolveSmtpHost() {
+  if (!env.smtpHost || net.isIP(env.smtpHost)) return env.smtpHost;
+
+  try {
+    const [address] = await dns.resolve4(env.smtpHost);
+    return address ?? env.smtpHost;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[email] failed to resolve IPv4 address for ${env.smtpHost}: ${message}`);
+    return env.smtpHost;
+  }
+}
+
+async function getTransporter() {
+  const smtpHost = await resolveSmtpHost();
+  const options: SMTPTransport.Options = {
+    host: smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
+    dnsTimeout: 10_000,
+    tls: smtpHost !== env.smtpHost ? { servername: env.smtpHost } : undefined,
     auth: {
       user: env.smtpUser,
       pass: env.smtpPass,
     },
-  });
+  };
+
+  return nodemailer.createTransport(options);
 }
 
 function escapeHtml(value: string) {
@@ -153,7 +177,9 @@ async function sendMail(content: MailContent) {
     return;
   }
 
-  await getTransporter().sendMail({
+  const transporter = await getTransporter();
+
+  await transporter.sendMail({
     from: env.mailFrom,
     to: content.to,
     subject: content.subject,

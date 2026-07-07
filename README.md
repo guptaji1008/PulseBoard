@@ -1,254 +1,371 @@
 # PulseBoard
 
-A real-time project and task management platform — a bit like a lightweight Trello. You sign up, create projects, add tasks, assign them to people, and move them across **To do → In progress → Done**. When a teammate changes something, your board updates on its own without a refresh. There's also full-text task search and an AI-written summary that tells you where a project stands.
+PulseBoard is a real-time project and task management platform inspired by lightweight Kanban tools. Users can create projects, add members, assign tasks, move work across **Todo -> In Progress -> Done**, search tasks, get AI-generated project summaries, and receive email notifications for important project/task activity.
 
-This is a personal project I'm actively building to get hands-on, production-style experience with **PostgreSQL, Redis, and Socket.io** in a real multi-service architecture, alongside my day-to-day MERN stack work. It has two parts that work together: a backend API and a frontend web app.
+The project was built as a production-style full-stack application using **React, Node.js, PostgreSQL, Redis, Socket.io, BullMQ, Prisma, Docker, and Groq AI**. It includes secure authentication, live multi-user boards, background jobs, API documentation, and deployment-ready configuration for a Vercel frontend and Render backend.
 
-I'm building this in my spare time alongside full-time work, so it's an ongoing project — most of the core features are done and working, and I'm actively adding more. I've been upfront about what's still in progress near the end of this file.
+## Table of Contents
 
-> **Note to self before publishing:** redeploy frontend/backend under a fresh Vercel/Render project name before linking this publicly — current deployment URLs reference an earlier internal project name.
-
-## Table of contents
-
-- [What you can do](#what-you-can-do)
-- [How it works](#how-it-works)
-- [Tech used](#tech-used)
-- [Folder structure](#folder-structure)
-- [Running it on your machine](#running-it-on-your-machine)
-- [Environment variables](#environment-variables)
-- [The API](#the-api)
-- [Real-time updates](#real-time-updates)
-- [Search](#search)
-- [AI summary](#ai-summary)
-- [Tests](#tests)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Folder Structure](#folder-structure)
+- [Local Setup](#local-setup)
+- [Environment Variables](#environment-variables)
+- [Authentication Flow](#authentication-flow)
+- [Background Email Jobs](#background-email-jobs)
+- [Real-Time Updates](#real-time-updates)
+- [API Overview](#api-overview)
+- [Search and AI Summary](#search-and-ai-summary)
+- [Testing](#testing)
 - [Deployment](#deployment)
-- [Current status](#current-status)
 - [Roadmap](#roadmap)
 
-## What you can do
+## Features
 
-Here's the full flow from a normal user's side:
+- **Full authentication flow**: register, email OTP verification, login, refresh token rotation, logout, forgot password, reset password, and `/auth/me`.
+- **Secure cookies**: HttpOnly access/refresh cookies with production-ready `sameSite` and `secure` settings.
+- **Socket authentication**: short-lived socket tokens for reliable Vercel-to-Render real-time connections.
+- **Project management**: create, update, delete, and list projects.
+- **Member management**: project owners can add members by email.
+- **Task management**: create, assign, prioritize, update status, set due dates, and delete tasks.
+- **Live Kanban board**: Socket.io updates all connected project members without page refreshes.
+- **Background email notifications**: BullMQ + Redis jobs send notification emails for project creation, member addition, task assignment, and task status changes.
+- **Full-text search**: PostgreSQL search across tasks the user is allowed to access.
+- **AI project summaries**: Groq LLaMA model summarizes project status, with Redis caching and fallback summaries.
+- **API docs**: Swagger documentation is available at `/api/docs`.
+- **Production deployment**: frontend on Vercel, backend on Render, Redis/PostgreSQL backing services.
 
-- **Create an account and log in.** Your password is hashed, and after logging in you get a token that keeps you signed in.
-- **Create projects.** Each project is a workspace with its own board.
-- **Add members.** As the project owner, you can add other people to a project by their email so you can work together.
-- **Add tasks.** A task has a title, an optional description, a priority (Low, Medium, High), an assignee, and a due date.
-- **Move tasks.** Each task sits in one of three columns: To do, In progress, or Done. You move it by picking a new status on the card.
-- **Watch it update live.** If someone else adds or moves a task in a project you're looking at, it shows up on your board straight away. No refresh needed.
-- **Search your tasks.** Type a word and it finds matching tasks across all the projects you're part of.
-- **Get an AI summary.** On any board you can click a button and get a short written summary of the project's current status.
+## Architecture
 
-## How it works
+PulseBoard is split into two apps:
 
-This is the simple version of what happens behind the scenes.
+- `frontend/`: React + Vite single-page application.
+- `backend/`: Express + Prisma REST API with Socket.io and BullMQ workers.
 
-The **frontend** is the website you see and click on. It's a single-page app, which means the page never fully reloads while you use it. When you do something, like create a task, the frontend sends a request to the backend.
+High-level flow:
 
-The **backend** is the brain. It receives those requests, checks that you're allowed to do what you're asking, saves things to the database, and sends an answer back.
+1. The frontend calls the REST API using RTK Query.
+2. The backend validates auth, checks project membership, and writes data with Prisma.
+3. PostgreSQL stores users, projects, members, tasks, OTPs, reset tokens, and refresh tokens.
+4. Socket.io broadcasts task changes to everyone viewing the same project board.
+5. Redis powers Socket.io pub/sub, API rate limiting, AI summary caching, and BullMQ email queues.
+6. BullMQ processes email notifications in the background so API requests stay fast.
+7. Groq generates project summaries, with a local fallback if no API key is configured.
 
-The **database (PostgreSQL)** is where everything is stored for good: users, projects, tasks, and who belongs to which project.
-
-**Redis** does three smaller jobs. It remembers AI summaries for a short while so we don't ask the AI the same thing twice, it keeps a count of requests so nobody can spam the API, and it helps pass real-time messages around.
-
-**Socket.io** is what makes the board feel live. When a task changes, the backend sends a little message over a live connection to everyone looking at that project, and their boards update on their own.
-
-**Groq** is the AI service that writes the project summaries.
-
-Every write follows the same simple path: a request comes in, the backend checks your login, saves the change to the database, sends out a live update, and replies to you.
-
-## Tech used
-
-**Backend**
-
-- Node.js with Express (written in TypeScript)
-- PostgreSQL with Prisma (Prisma is the tool that talks to the database)
-- Redis for caching, rate limiting, and live messaging
-- Socket.io for real-time updates
-- JWT for login tokens
-- Groq (LLaMA model) for AI summaries
+## Tech Stack
 
 **Frontend**
 
-- React with Vite (written in TypeScript)
-- Tailwind CSS for styling
-- Redux Toolkit and RTK Query for handling data and caching
-- Socket.io client for live updates
-- React Router for moving between pages
+- React 19
+- TypeScript
+- Vite
+- Redux Toolkit + RTK Query
+- React Router
+- Tailwind CSS
+- Socket.io Client
+- Lucide React
 
-Both parts run in Docker, so they behave the same on any machine.
+**Backend**
 
-## Folder structure
+- Node.js
+- Express
+- TypeScript
+- PostgreSQL
+- Prisma
+- Redis + ioredis
+- Socket.io + Redis adapter
+- BullMQ
+- Nodemailer
+- JWT
+- Zod validation
+- Swagger/OpenAPI
+- Jest + Supertest
 
-```
+**DevOps / Deployment**
+
+- Docker / Docker Compose
+- Vercel frontend
+- Render backend
+- Hosted PostgreSQL and Redis
+
+## Folder Structure
+
+```text
 .
-├── backend/    # the API
-└── frontend/   # the web app
+├── backend/
+│   ├── prisma/              # Prisma schema and migrations
+│   ├── src/
+│   │   ├── config/          # env, Prisma, Redis config
+│   │   ├── docs/            # Swagger docs
+│   │   ├── middleware/      # auth, validation, rate limit, error handler
+│   │   ├── modules/         # auth, projects, tasks, search, AI, notifications
+│   │   └── sockets/         # Socket.io server setup
+│   └── tests/               # unit and integration tests
+├── frontend/
+│   └── src/
+│       ├── app/             # Redux store/hooks
+│       ├── components/      # reusable UI components
+│       ├── features/        # auth slice
+│       ├── lib/             # config/socket helpers
+│       ├── pages/           # app pages
+│       └── services/        # RTK Query API client
+└── README.md
 ```
 
-Each folder has its own README with more detail. The backend also has a `docs/` folder with the architecture diagram, a Postman collection you can import to try the API, and the test report.
+## Local Setup
 
-## Running it on your machine
+### Option 1: Docker for databases, local dev servers
 
-The only thing you need installed is **Docker**. Docker sets up Postgres and Redis for you, so there's nothing else to install by hand.
+This is the best setup for development.
 
-**Step 1 — start the backend and the databases.**
-
-```bash
+```powershell
 cd backend
-cp .env.example .env
-docker compose up --build
-```
-
-This starts Postgres, Redis, and the API together in one go. The first time it builds the images, so give it a minute. When it's ready, the API is at `http://localhost:4000`. You can open `http://localhost:4000/api/docs` in your browser to see and try every endpoint.
-
-**Step 2 — start the frontend** (open a second terminal).
-
-```bash
-cd frontend
+copy .env.example .env
+docker-compose up -d postgres redis
 npm install
-cp .env.example .env
-npm run dev
-```
-
-The app opens at `http://localhost:5173`. Open it, create an account, and you're in.
-
-**To see the live updates working:** open the same project in two browser windows side by side, then move a task in one window. It moves in the other window right away.
-
-If you'd rather run the backend without Docker while developing, you can start only the databases in Docker and run the API on your machine:
-
-```bash
-cd backend
-docker compose up -d postgres redis
-npm install
-cp .env.example .env
 npm run prisma:generate
 npm run prisma:migrate
 npm run dev
 ```
 
-## Environment variables
+In a second terminal:
 
-These are the settings the apps read on startup. There are example files (`.env.example`) in both folders, so you can copy them and fill in what you need.
-
-**Backend**
-
-- `PORT` — the port the API runs on. Default is `4000`.
-- `DATABASE_URL` — where Postgres is. The default works with Docker.
-- `REDIS_URL` — where Redis is. The default works with Docker.
-- `JWT_SECRET` — a secret string used to sign login tokens. Change it for a real deploy.
-- `JWT_EXPIRES_IN` — how long a login lasts. Default is `7d` (seven days).
-- `GROQ_API_KEY` — your Groq key for AI summaries. Leave it empty and the app still runs (see the AI section below).
-- `GROQ_MODEL` — which AI model to use.
-- `CORS_ORIGIN` — which website is allowed to call the API. For a deploy, set this to your live frontend URL.
-
-**Frontend**
-
-- `VITE_API_URL` — the address of the backend. Default is `http://localhost:4000`. For a deploy, set this to your live backend URL.
-
-## The API
-
-Everything lives under `/api`. Most routes need you to be logged in (the frontend handles sending your token automatically).
-
-**Auth**
-
-- `POST /api/auth/register` — create an account
-- `POST /api/auth/login` — log in
-- `GET /api/auth/me` — get the logged-in user
-
-**Projects**
-
-- `GET /api/projects` — list your projects
-- `POST /api/projects` — create a project
-- `GET /api/projects/:id` — get one project and its members
-- `PATCH /api/projects/:id` — update a project
-- `DELETE /api/projects/:id` — delete a project (owner only)
-- `POST /api/projects/:id/members` — add a member by email (owner only)
-
-**Tasks**
-
-- `GET /api/projects/:projectId/tasks` — list a project's tasks
-- `POST /api/projects/:projectId/tasks` — create a task
-- `PATCH /api/tasks/:id` — update a task (status, assignee, and so on)
-- `DELETE /api/tasks/:id` — delete a task
-
-**Search and AI**
-
-- `GET /api/search?q=word` — search your tasks
-- `POST /api/projects/:projectId/summary` — get an AI summary of a project
-
-There's also `GET /health` to check the API is up, and `GET /api/docs` for the full interactive documentation.
-
-## Real-time updates
-
-This is the part I'm happiest with. When you open a project board, the app quietly opens a live connection to the backend and joins a "room" for that project. From then on, whenever any member creates, moves, or deletes a task, the backend sends a small message to everyone in that room, and their boards update on their own.
-
-There's a small "Live" dot at the top of the board so you can tell the live connection is working. If the connection ever drops, the app still keeps the board correct by refetching after each change, so you never end up looking at stale data.
-
-## Search
-
-Search uses PostgreSQL's built-in full-text search. It looks through task titles and descriptions, only inside the projects you belong to, and orders the results so the closest matches come first.
-
-## AI summary
-
-The summary feature sends the project's task list to Groq and asks for a short status write-up. To keep it fast and avoid repeating work, the result is saved in Redis for about ten minutes, so asking again right away returns the saved one instantly.
-
-One nice detail: if no Groq key is set, the app doesn't break. It falls back to a simple summary that counts how many tasks are in each column. That way the whole app runs out of the box, and you only add a key when you want real AI-written text.
-
-## Tests
-
-The backend has both unit tests and integration tests.
-
-```bash
-cd backend
-npm test                # quick tests, no setup needed
-npm run test:coverage   # full run (needs Postgres and Redis running)
+```powershell
+cd frontend
+copy .env.example .env
+npm install
+npm run dev
 ```
 
-The unit tests check the validation rules. The integration tests actually call the API end to end: register, log in, create a project, create and move a task, search for it, and confirm that someone who isn't a member is blocked.
+Open:
+
+- Frontend: `http://localhost:5173`
+- Backend health: `http://localhost:4000/health`
+- Swagger docs: `http://localhost:4000/api/docs`
+
+### Option 2: Run backend stack with Docker
+
+```powershell
+cd backend
+copy .env.example .env
+docker-compose up --build
+```
+
+Then run the frontend separately:
+
+```powershell
+cd frontend
+copy .env.example .env
+npm install
+npm run dev
+```
+
+## Environment Variables
+
+### Backend
+
+```env
+NODE_ENV=development
+PORT=4000
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/taskdb"
+REDIS_URL="redis://localhost:6380"
+JWT_SECRET="change_me_in_production"
+JWT_EXPIRES_IN="7d"
+JWT_REFRESH_EXPIRES_IN="7d"
+APP_URL="http://localhost:5173"
+SMTP_HOST=""
+SMTP_PORT="587"
+SMTP_SECURE="false"
+SMTP_USER=""
+SMTP_PASS=""
+MAIL_FROM="PulseBoard <no-reply@pulseboard.local>"
+GROQ_API_KEY=""
+GROQ_MODEL="llama-3.3-70b-versatile"
+CORS_ORIGIN="*"
+```
+
+Important production values:
+
+- `NODE_ENV=production`
+- `JWT_SECRET`: strong secret, not the dev value.
+- `APP_URL`: deployed frontend URL.
+- `CORS_ORIGIN`: deployed frontend URL, for example `https://your-app.vercel.app`.
+- `REDIS_URL`: hosted Redis URL. `rediss://` URLs are supported.
+- `SMTP_*`: SMTP credentials for real emails.
+- `GROQ_API_KEY`: optional, but needed for AI-written summaries.
+
+### Frontend
+
+```env
+VITE_API_URL=http://localhost:4000/api
+VITE_SOCKET_URL=http://localhost:4000
+```
+
+For production:
+
+```env
+VITE_API_URL=https://your-render-backend.onrender.com/api
+VITE_SOCKET_URL=https://your-render-backend.onrender.com
+```
+
+## Authentication Flow
+
+PulseBoard uses a full auth system:
+
+1. **Register**: user creates an account with name, email, and password.
+2. **Email OTP verification**: backend sends a one-time code through Nodemailer.
+3. **Login**: password is checked with bcrypt, then access and refresh tokens are issued.
+4. **HttpOnly cookies**: tokens are stored in secure cookies instead of localStorage.
+5. **Refresh token rotation**: `/auth/refresh` issues fresh tokens and stores refresh token state.
+6. **Logout**: refresh token is revoked and auth cookies are cleared.
+7. **Forgot/reset password**: backend creates a secure reset token and sends a reset link by email.
+8. **Socket token**: `/auth/socket-token` returns a short-lived JWT used by Socket.io in production cross-origin deployments.
+
+## Background Email Jobs
+
+Email notifications are handled with **BullMQ** and **Redis** so emails do not slow down API responses.
+
+Jobs are enqueued when:
+
+- a project is created,
+- a member is added to a project,
+- a task is assigned,
+- a task status changes.
+
+The worker starts with the backend process and processes the `email-notifications` queue. If SMTP is not configured, the email service logs what it would send, which keeps local development easy.
+
+## Real-Time Updates
+
+Socket.io powers live board updates.
+
+- When a user opens a project board, the client connects to Socket.io and joins a project room.
+- When a task is created, updated, or deleted, the backend emits an event to that room.
+- The frontend updates RTK Query task cache immediately, so all connected users see the latest board state.
+- Redis adapter support allows Socket.io events to work correctly across multiple backend instances.
+
+The board shows a `Live` / `Offline` indicator so users can see socket connection state.
+
+## API Overview
+
+All API routes are under `/api`.
+
+### Auth
+
+- `POST /api/auth/register`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/resend-verification`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `GET /api/auth/me`
+- `GET /api/auth/socket-token`
+
+### Projects
+
+- `GET /api/projects`
+- `POST /api/projects`
+- `GET /api/projects/:id`
+- `PATCH /api/projects/:id`
+- `DELETE /api/projects/:id`
+- `POST /api/projects/:id/members`
+
+### Tasks
+
+- `GET /api/projects/:projectId/tasks`
+- `POST /api/projects/:projectId/tasks`
+- `PATCH /api/tasks/:id`
+- `DELETE /api/tasks/:id`
+
+### Search and AI
+
+- `GET /api/search?q=keyword`
+- `POST /api/projects/:projectId/summary`
+
+Utility:
+
+- `GET /health`
+- `GET /api/docs`
+- `GET /api/docs.json`
+
+## Search and AI Summary
+
+Search uses PostgreSQL full-text search over task titles and descriptions, scoped to projects where the logged-in user is a member.
+
+AI summaries use Groq with the configured `GROQ_MODEL`. Results are cached in Redis for faster repeated reads. If `GROQ_API_KEY` is missing, the app returns a deterministic fallback summary based on task counts by status.
+
+## Testing
+
+Backend tests:
+
+```powershell
+cd backend
+npm test
+npm run test:coverage
+```
+
+Notes:
+
+- Schema/unit tests can run without external services.
+- Integration tests need PostgreSQL running with the configured `DATABASE_URL`.
+- Redis is also expected by the app runtime for sockets, rate limiting, cache, and queues.
+
+Frontend build check:
+
+```powershell
+cd frontend
+npm run build
+```
+
+Backend build check:
+
+```powershell
+cd backend
+npm run build
+```
 
 ## Deployment
 
-The frontend is deployed on Vercel and the backend on Render. *(Update these links once redeployed under the project's own name.)*
+The project is designed for:
 
-- App: `https://pulse-board-fe.vercel.app`
-- API: `https://pulseboard-1uoa.onrender.com/api/docs`
+- **Frontend**: Vercel
+- **Backend**: Render
+- **Database**: PostgreSQL
+- **Queue/cache/realtime broker**: Redis
 
-The two are tied together by two settings: the frontend's `VITE_API_URL` points at the Render API, and the backend's `CORS_ORIGIN` is set to the Vercel app URL so the browser is allowed to talk to it.
+Production environment checklist:
 
-A couple of things worth knowing about the free hosting:
+**Vercel**
 
-- **The backend sleeps when it's idle.** On Render's free plan, the API spins down after about 15 minutes of no activity, and the next request takes 30 to 60 seconds to wake it back up. So the very first page load after a quiet period can hang for up to a minute, and then it's fast again. If you're showing this to someone live, open the API link a minute beforehand so it's already awake. The live updates also drop while the service is asleep and reconnect once it's back up.
-- **The free database is temporary.** Render's free PostgreSQL expires about 30 days after it's created (with a short grace period before the data is removed). That's fine for a demo, but it isn't meant for long-term storage.
+```env
+VITE_API_URL=https://your-render-backend.onrender.com/api
+VITE_SOCKET_URL=https://your-render-backend.onrender.com
+```
 
-## Current status
+**Render**
 
-All the main features are built and working:
+```env
+NODE_ENV=production
+CORS_ORIGIN=https://your-vercel-app.vercel.app
+APP_URL=https://your-vercel-app.vercel.app
+DATABASE_URL=your_production_postgres_url
+REDIS_URL=your_production_redis_url
+JWT_SECRET=your_strong_secret
+SMTP_HOST=...
+SMTP_USER=...
+SMTP_PASS=...
+```
 
-- Sign up and log in, with hashed passwords and token-based sessions
-- Create, view, update, and delete projects
-- Add members to a project
-- Create, assign, prioritise, move, and delete tasks
-- A board with the three live columns
-- Real-time updates over a live connection (Socket.io)
-- Full-text task search (PostgreSQL)
-- AI project summaries (with a working fallback when there's no AI key)
-- Rate limiting and basic security headers on the API
-- Interactive API docs and a Postman collection
-- Unit and integration tests
-- A responsive layout that works on phone and desktop
-- Docker setup for the whole thing
+For production cookies to work cross-origin, the backend must run over HTTPS and `NODE_ENV` should be `production`.
 
 ## Roadmap
 
-This is an ongoing project, and here's what I'm planning to add next:
-
-- **Drag and drop for tasks.** Right now you move a task between columns using a dropdown on the card. Adding drag-and-drop (likely with `dnd-kit`) would make the board feel more native.
-- **Notifications.** When you assign a task to someone, they see it on the board but don't get an alert. Planning a simple in-app + email notification on assignment.
-- **Email invites for new users.** At the moment you can only add a member who has already signed up. Adding an email-invite flow for people without an account yet is next.
-- **Scaling Socket.io across multiple instances.** Currently single-instance; adding the Redis adapter for Socket.io so real-time works correctly if the backend is ever scaled horizontally.
-- **Role-based access control.** Right now it's just owner vs. member — planning finer-grained roles (e.g. admin, contributor, viewer) per project.
-- **Activity log / audit trail.** A history of who changed what and when, per project.
-- **File attachments on tasks.** Letting users attach files/images to a task.
-- **CI/CD pipeline.** Adding GitHub Actions for running tests and auto-deploying on merge.
-- **Wider test coverage.** Search and AI summary endpoints currently have lighter coverage than auth/tasks — bringing those up to the same bar.
-- **Production-grade logging/observability.** Structured logging (Pino/Winston) and basic monitoring instead of console logs.
+- Drag-and-drop task movement with `dnd-kit`.
+- Invite flow for users who do not have an account yet.
+- More granular project roles such as admin, contributor, and viewer.
+- Activity log / audit trail for project and task changes.
+- File attachments on tasks.
+- More integration test coverage for search, AI, and notifications.
+- Structured logging and monitoring for production observability.
