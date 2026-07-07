@@ -2,7 +2,7 @@
 
 PulseBoard is a real-time project and task management platform inspired by lightweight Kanban tools. Users can create projects, add members, assign tasks, move work across **Todo -> In Progress -> Done**, search tasks, get AI-generated project summaries, and receive email notifications for important project/task activity.
 
-The project was built as a production-style full-stack application using **React, Node.js, PostgreSQL, Redis, Socket.io, BullMQ, Prisma, Docker, and Groq AI**. It includes secure authentication, live multi-user boards, background jobs, API documentation, and deployment-ready configuration for a Vercel frontend and Render backend.
+The project was built as a production-style full-stack application using **React, Node.js, PostgreSQL, Redis, Socket.io, BullMQ, Prisma, Docker, Brevo, and Groq AI**. It includes secure authentication, live multi-user boards, background jobs, transactional emails, API documentation, and deployment-ready configuration for a Vercel frontend and Render backend.
 
 ## Table of Contents
 
@@ -30,7 +30,7 @@ The project was built as a production-style full-stack application using **React
 - **Member management**: project owners can add members by email.
 - **Task management**: create, assign, prioritize, update status, set due dates, and delete tasks.
 - **Live Kanban board**: Socket.io updates all connected project members without page refreshes.
-- **Background email notifications**: BullMQ + Redis jobs send notification emails for project creation, member addition, task assignment, and task status changes.
+- **Transactional emails**: Brevo API sends OTP and password reset emails, while BullMQ + Redis jobs send project/task notification emails in the background.
 - **Full-text search**: PostgreSQL search across tasks the user is allowed to access.
 - **AI project summaries**: Groq LLaMA model summarizes project status, with Redis caching and fallback summaries.
 - **API docs**: Swagger documentation is available at `/api/docs`.
@@ -50,8 +50,9 @@ High-level flow:
 3. PostgreSQL stores users, projects, members, tasks, OTPs, reset tokens, and refresh tokens.
 4. Socket.io broadcasts task changes to everyone viewing the same project board.
 5. Redis powers Socket.io pub/sub, API rate limiting, AI summary caching, and BullMQ email queues.
-6. BullMQ processes email notifications in the background so API requests stay fast.
-7. Groq generates project summaries, with a local fallback if no API key is configured.
+6. Brevo sends transactional emails over HTTPS, avoiding SMTP port issues on production hosting.
+7. BullMQ processes project/task notification emails in the background so API requests stay fast.
+8. Groq generates project summaries, with a local fallback if no API key is configured.
 
 ## Tech Stack
 
@@ -76,7 +77,8 @@ High-level flow:
 - Redis + ioredis
 - Socket.io + Redis adapter
 - BullMQ
-- Nodemailer
+- Nodemailer fallback
+- Brevo Transactional Email API
 - JWT
 - Zod validation
 - Swagger/OpenAPI
@@ -174,12 +176,13 @@ JWT_SECRET="change_me_in_production"
 JWT_EXPIRES_IN="7d"
 JWT_REFRESH_EXPIRES_IN="7d"
 APP_URL="http://localhost:5173"
+BREVO_API_KEY=""
+MAIL_FROM="PulseBoard <no-reply@pulseboard.local>"
 SMTP_HOST=""
 SMTP_PORT="587"
 SMTP_SECURE="false"
 SMTP_USER=""
 SMTP_PASS=""
-MAIL_FROM="PulseBoard <no-reply@pulseboard.local>"
 GROQ_API_KEY=""
 GROQ_MODEL="llama-3.3-70b-versatile"
 CORS_ORIGIN="*"
@@ -192,7 +195,9 @@ Important production values:
 - `APP_URL`: deployed frontend URL.
 - `CORS_ORIGIN`: deployed frontend URL, for example `https://your-app.vercel.app`.
 - `REDIS_URL`: hosted Redis URL. `rediss://` URLs are supported.
-- `SMTP_*`: SMTP credentials for real emails.
+- `BREVO_API_KEY`: Brevo API key for production email delivery. It should start with `xkeysib-`.
+- `MAIL_FROM`: a sender email verified in Brevo, for example `PulseBoard <name@example.com>`.
+- `SMTP_*`: optional SMTP fallback values. Brevo API is preferred for Render because SMTP ports can time out.
 - `GROQ_API_KEY`: optional, but needed for AI-written summaries.
 
 ### Frontend
@@ -205,16 +210,18 @@ VITE_SOCKET_URL=http://localhost:4000
 For production:
 
 ```env
-VITE_API_URL=https://your-render-backend.onrender.com/api
+VITE_API_URL=/api
 VITE_SOCKET_URL=https://your-render-backend.onrender.com
 ```
+
+In production, the frontend uses a Vercel rewrite from `/api/*` to the Render backend. Keeping `VITE_API_URL=/api` makes auth requests same-origin from the browser's point of view, which helps HttpOnly cookies work reliably after login.
 
 ## Authentication Flow
 
 PulseBoard uses a full auth system:
 
 1. **Register**: user creates an account with name, email, and password.
-2. **Email OTP verification**: backend sends a one-time code through Nodemailer.
+2. **Email OTP verification**: backend sends a one-time code through Brevo.
 3. **Login**: password is checked with bcrypt, then access and refresh tokens are issued.
 4. **HttpOnly cookies**: tokens are stored in secure cookies instead of localStorage.
 5. **Refresh token rotation**: `/auth/refresh` issues fresh tokens and stores refresh token state.
@@ -233,7 +240,7 @@ Jobs are enqueued when:
 - a task is assigned,
 - a task status changes.
 
-The worker starts with the backend process and processes the `email-notifications` queue. If SMTP is not configured, the email service logs what it would send, which keeps local development easy.
+The worker starts with the backend process and processes the `email-notifications` queue. If Brevo or SMTP is not configured, the email service logs what it would send, which keeps local development easy.
 
 ## Real-Time Updates
 
@@ -340,8 +347,25 @@ Production environment checklist:
 **Vercel**
 
 ```env
-VITE_API_URL=https://your-render-backend.onrender.com/api
+VITE_API_URL=/api
 VITE_SOCKET_URL=https://your-render-backend.onrender.com
+```
+
+The frontend should include a Vercel rewrite similar to:
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://your-render-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
 ```
 
 **Render**
@@ -353,12 +377,19 @@ APP_URL=https://your-vercel-app.vercel.app
 DATABASE_URL=your_production_postgres_url
 REDIS_URL=your_production_redis_url
 JWT_SECRET=your_strong_secret
-SMTP_HOST=...
-SMTP_USER=...
-SMTP_PASS=...
+BREVO_API_KEY=your_brevo_api_key
+MAIL_FROM="PulseBoard <your_verified_brevo_sender@example.com>"
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
-For production cookies to work cross-origin, the backend must run over HTTPS and `NODE_ENV` should be `production`.
+Brevo requirements:
+
+- Use an API key from **SMTP & API -> API Keys**, not an SMTP key. API keys usually start with `xkeysib-`.
+- `MAIL_FROM` must be a verified sender in Brevo.
+- If Brevo blocks an unrecognized IP, add the Render outbound IP shown in the Render error log under Brevo authorized IPs.
+
+For production cookies to work, the backend must run over HTTPS and `NODE_ENV` should be `production`. If the frontend calls the backend through Vercel's `/api` rewrite, the browser treats auth requests as same-origin and sends the HttpOnly cookies more reliably.
 
 ## Roadmap
 
