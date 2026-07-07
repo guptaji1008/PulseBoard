@@ -24,6 +24,7 @@ export const env = {
   smtpSecure: process.env.SMTP_SECURE === 'true',
   smtpUser: process.env.SMTP_USER ?? '',
   smtpPass: process.env.SMTP_PASS ?? '',
+  brevoApiKey: process.env.BREVO_API_KEY ?? '',
   mailFrom: process.env.MAIL_FROM ?? 'PulseBoard <no-reply@pulseboard.local>',
   groqApiKey: process.env.GROQ_API_KEY ?? '',
   groqModel: process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',

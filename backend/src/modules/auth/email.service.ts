@@ -12,7 +12,15 @@ type MailContent = {
 };
 
 function canSendEmail() {
-  return Boolean(env.smtpHost && env.smtpUser && env.smtpPass);
+  return Boolean(env.brevoApiKey || (env.smtpHost && env.smtpUser && env.smtpPass));
+}
+
+function parseMailFrom(value: string) {
+  const match = /^(.*?)\s*<([^>]+)>$/.exec(value.trim());
+  if (!match) return { email: value.trim() };
+
+  const name = match[1].trim().replace(/^"|"$/g, '');
+  return { name: name || undefined, email: match[2].trim() };
 }
 
 async function resolveSmtpHost() {
@@ -173,7 +181,32 @@ function notificationEmailHtml(options: {
 
 async function sendMail(content: MailContent) {
   if (!canSendEmail()) {
-    console.info(`[email] SMTP is not configured. Would send "${content.subject}" to ${content.to}: ${content.text}`);
+    console.info(`[email] Email provider is not configured. Would send "${content.subject}" to ${content.to}: ${content.text}`);
+    return;
+  }
+
+  if (env.brevoApiKey) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': env.brevoApiKey,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: parseMailFrom(env.mailFrom),
+        to: [{ email: content.to }],
+        subject: content.subject,
+        textContent: content.text,
+        htmlContent: content.html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brevo email failed with ${response.status}: ${errorText}`);
+    }
+
     return;
   }
 
