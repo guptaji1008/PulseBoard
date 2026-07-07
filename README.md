@@ -1,94 +1,88 @@
 # PulseBoard
 
-PulseBoard is a real-time project and task management platform inspired by lightweight Kanban tools. Users can create projects, add members, assign tasks, move work across **Todo -> In Progress -> Done**, search tasks, get AI-generated project summaries, and receive email notifications for important project/task activity.
+PulseBoard is a real-time project and task management app, similar to a simple Kanban tool. Users can sign up, create projects, add team members, create tasks, and move tasks across three stages: **Todo → In Progress → Done**. The app also has task search, AI-generated project summaries, and email notifications for important activity.
 
-The project was built as a production-style full-stack application using **React, Node.js, PostgreSQL, Redis, Socket.io, BullMQ, Prisma, Docker, Brevo, and Groq AI**. It includes secure authentication, live multi-user boards, background jobs, transactional emails, API documentation, and deployment-ready configuration for a Vercel frontend and Render backend.
+This is a full-stack project built with **React, Node.js, PostgreSQL, Redis, Socket.io, BullMQ, Prisma, Docker, Brevo, and Groq AI**. It has secure login, a live multi-user board, background email jobs, API docs, and is ready to deploy (frontend on Vercel, backend on Render).
 
 ## Table of Contents
 
 - [Features](#features)
-- [Architecture](#architecture)
+- [How It Works](#how-it-works)
 - [Tech Stack](#tech-stack)
 - [Folder Structure](#folder-structure)
-- [Local Setup](#local-setup)
+- [Running It Locally](#running-it-locally)
 - [Environment Variables](#environment-variables)
-- [Authentication Flow](#authentication-flow)
-- [Background Email Jobs](#background-email-jobs)
-- [Real-Time Updates](#real-time-updates)
-- [API Overview](#api-overview)
+- [Login and Auth](#login-and-auth)
+- [Background Emails](#background-emails)
+- [Live Board Updates](#live-board-updates)
+- [API Routes](#api-routes)
 - [Search and AI Summary](#search-and-ai-summary)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [Roadmap](#roadmap)
+- [What's Next](#whats-next)
 
 ## Features
 
-- **Full authentication flow**: register, email OTP verification, login, refresh token rotation, logout, forgot password, reset password, and `/auth/me`.
-- **Secure cookies**: HttpOnly access/refresh cookies with production-ready `sameSite` and `secure` settings.
-- **Socket authentication**: short-lived socket tokens for reliable Vercel-to-Render real-time connections.
-- **Project management**: create, update, delete, and list projects.
-- **Member management**: project owners can add members by email.
-- **Task management**: create, assign, prioritize, update status, set due dates, and delete tasks.
-- **Live Kanban board**: Socket.io updates all connected project members without page refreshes.
-- **Transactional emails**: Brevo API sends OTP and password reset emails, while BullMQ + Redis jobs send project/task notification emails in the background.
-- **Full-text search**: PostgreSQL search across tasks the user is allowed to access.
-- **AI project summaries**: Groq LLaMA model summarizes project status, with Redis caching and fallback summaries.
-- **API docs**: Swagger documentation is available at `/api/docs`.
-- **Production deployment**: frontend on Vercel, backend on Render, Redis/PostgreSQL backing services.
+- **Full login system**: sign up, verify email with an OTP code, log in, log out, forgot/reset password, and a `/me` route to get the current user.
+- **Safe cookies**: login tokens are stored in HttpOnly cookies (not localStorage), with secure settings for production.
+- **Working sockets in production**: a short-lived socket token is used so real-time updates work reliably between Vercel (frontend) and Render (backend).
+- **Projects**: create, view, update, and delete projects.
+- **Team members**: project owners can add members by email.
+- **Tasks**: create tasks, assign them to a member, set priority and due date, change status, and delete them.
+- **Live Kanban board**: when one member updates a task, everyone else looking at the same project sees it update instantly, no refresh needed.
+- **Emails**: OTP and password reset emails go out through the Brevo API. Project/task notification emails (like "you were assigned a task") are sent in the background using BullMQ and Redis, so the app stays fast.
+- **Search**: full-text search across tasks, using PostgreSQL.
+- **AI summaries**: a Groq LLaMA model can summarize a project's status. Results are cached in Redis, and there's a simple fallback summary if no AI key is set.
+- **API docs**: available at `/api/docs` (Swagger).
+- **Ready for production**: frontend on Vercel, backend on Render, with hosted PostgreSQL and Redis.
 
-## Architecture
+## How It Works
 
-PulseBoard is split into two apps:
+The project has two apps:
 
-- `frontend/`: React + Vite single-page application.
-- `backend/`: Express + Prisma REST API with Socket.io and BullMQ workers.
+- `frontend/` – a React + Vite single-page app.
+- `backend/` – an Express + Prisma REST API, with Socket.io and BullMQ workers.
 
-High-level flow:
+Here's the basic flow, step by step:
 
-1. The frontend calls the REST API using RTK Query.
-2. The backend validates auth, checks project membership, and writes data with Prisma.
+1. The frontend sends requests to the backend using RTK Query.
+2. The backend checks login and project access, then reads/writes data through Prisma.
 3. PostgreSQL stores users, projects, members, tasks, OTPs, reset tokens, and refresh tokens.
-4. Socket.io broadcasts task changes to everyone viewing the same project board.
-5. Redis powers Socket.io pub/sub, API rate limiting, AI summary caching, and BullMQ email queues.
-6. Brevo sends transactional emails over HTTPS, avoiding SMTP port issues on production hosting.
-7. BullMQ processes project/task notification emails in the background so API requests stay fast.
-8. Groq generates project summaries, with a local fallback if no API key is configured.
+4. Socket.io sends task changes to everyone viewing the same project board.
+5. Redis is used in four places: Socket.io pub/sub, rate limiting, AI summary caching, and BullMQ queues.
+6. Brevo sends OTP and password reset emails over HTTPS (this avoids SMTP problems on Render).
+7. BullMQ sends project/task notification emails in the background, so API responses stay quick.
+8. Groq generates project summaries. If no API key is set, the app uses a simple fallback summary instead.
 
 ## Tech Stack
 
 **Frontend**
 
-- React 19
-- TypeScript
+- React 19 + TypeScript
 - Vite
 - Redux Toolkit + RTK Query
 - React Router
 - Tailwind CSS
 - Socket.io Client
-- Lucide React
+- Lucide React (icons)
 
 **Backend**
 
-- Node.js
-- Express
-- TypeScript
-- PostgreSQL
-- Prisma
-- Redis + ioredis
+- Node.js + Express + TypeScript
+- PostgreSQL + Prisma
+- Redis (via ioredis)
 - Socket.io + Redis adapter
-- BullMQ
-- Nodemailer fallback
-- Brevo Transactional Email API
-- JWT
-- Zod validation
-- Swagger/OpenAPI
-- Jest + Supertest
+- BullMQ (background jobs)
+- Brevo Transactional Email API (with Nodemailer as a fallback)
+- JWT for auth, Zod for validation
+- Swagger/OpenAPI for docs
+- Jest + Supertest for tests
 
-**DevOps / Deployment**
+**DevOps**
 
 - Docker / Docker Compose
-- Vercel frontend
-- Render backend
+- Vercel (frontend)
+- Render (backend)
 - Hosted PostgreSQL and Redis
 
 ## Folder Structure
@@ -96,30 +90,28 @@ High-level flow:
 ```text
 .
 ├── backend/
-│   ├── prisma/              # Prisma schema and migrations
+│   ├── prisma/              # Database schema and migrations
 │   ├── src/
-│   │   ├── config/          # env, Prisma, Redis config
+│   │   ├── config/          # env, Prisma, and Redis setup
 │   │   ├── docs/            # Swagger docs
-│   │   ├── middleware/      # auth, validation, rate limit, error handler
+│   │   ├── middleware/      # auth, validation, rate limiting, error handling
 │   │   ├── modules/         # auth, projects, tasks, search, AI, notifications
 │   │   └── sockets/         # Socket.io server setup
 │   └── tests/               # unit and integration tests
 ├── frontend/
 │   └── src/
-│       ├── app/             # Redux store/hooks
-│       ├── components/      # reusable UI components
-│       ├── features/        # auth slice
-│       ├── lib/             # config/socket helpers
-│       ├── pages/           # app pages
-│       └── services/        # RTK Query API client
+│       ├── app/             # Redux store
+│       ├── components/      # reusable UI pieces
+│       ├── features/        # auth state (Redux slice)
+│       ├── lib/             # config and socket helpers
+│       ├── pages/           # app screens
+│       └── services/        # API client (RTK Query)
 └── README.md
 ```
 
-## Local Setup
+## Running It Locally
 
-### Option 1: Docker for databases, local dev servers
-
-This is the best setup for development.
+### Option 1: Docker for the databases, run the apps yourself (recommended)
 
 ```powershell
 cd backend
@@ -131,7 +123,7 @@ npm run prisma:migrate
 npm run dev
 ```
 
-In a second terminal:
+Open a second terminal for the frontend:
 
 ```powershell
 cd frontend
@@ -140,13 +132,13 @@ npm install
 npm run dev
 ```
 
-Open:
+Then open:
 
 - Frontend: `http://localhost:5173`
-- Backend health: `http://localhost:4000/health`
-- Swagger docs: `http://localhost:4000/api/docs`
+- Backend health check: `http://localhost:4000/health`
+- API docs: `http://localhost:4000/api/docs`
 
-### Option 2: Run backend stack with Docker
+### Option 2: Run the whole backend with Docker
 
 ```powershell
 cd backend
@@ -154,18 +146,11 @@ copy .env.example .env
 docker-compose up --build
 ```
 
-Then run the frontend separately:
-
-```powershell
-cd frontend
-copy .env.example .env
-npm install
-npm run dev
-```
+Then run the frontend the same way as above.
 
 ## Environment Variables
 
-### Backend
+### Backend (`backend/.env`)
 
 ```env
 NODE_ENV=development
@@ -173,7 +158,7 @@ PORT=4000
 DATABASE_URL="postgresql://postgres:postgres@localhost:5433/taskdb"
 REDIS_URL="redis://localhost:6380"
 JWT_SECRET="change_me_in_production"
-JWT_EXPIRES_IN="7d"
+JWT_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 APP_URL="http://localhost:5173"
 BREVO_API_KEY=""
@@ -188,74 +173,73 @@ GROQ_MODEL="llama-3.3-70b-versatile"
 CORS_ORIGIN="*"
 ```
 
-Important production values:
+A few notes for production:
 
-- `NODE_ENV=production`
-- `JWT_SECRET`: strong secret, not the dev value.
-- `APP_URL`: deployed frontend URL.
-- `CORS_ORIGIN`: deployed frontend URL, for example `https://your-app.vercel.app`.
-- `REDIS_URL`: hosted Redis URL. `rediss://` URLs are supported.
-- `BREVO_API_KEY`: Brevo API key for production email delivery. It should start with `xkeysib-`.
-- `MAIL_FROM`: a sender email verified in Brevo, for example `PulseBoard <name@example.com>`.
-- `SMTP_*`: optional SMTP fallback values. Brevo API is preferred for Render because SMTP ports can time out.
-- `GROQ_API_KEY`: optional, but needed for AI-written summaries.
+- `NODE_ENV` should be `production`.
+- `JWT_SECRET` must be a strong, private value — not the dev default.
+- `APP_URL` and `CORS_ORIGIN` should be your live frontend URL, e.g. `https://your-app.vercel.app`.
+- `REDIS_URL` should point to your hosted Redis. `rediss://` (with SSL) is supported.
+- `BREVO_API_KEY` should be a real API key, not an SMTP key — it usually starts with `xkeysib-`.
+- `MAIL_FROM` must use a sender email that's verified in your Brevo account.
+- `SMTP_*` values are only a backup option. Brevo's API is preferred on Render, since SMTP ports can be blocked or time out there.
+- `GROQ_API_KEY` is optional. Without it, AI summaries fall back to a simple, non-AI summary.
 
-### Frontend
+### Frontend (`frontend/.env`)
 
 ```env
 VITE_API_URL=http://localhost:4000/api
 VITE_SOCKET_URL=http://localhost:4000
 ```
 
-For production:
+In production:
 
 ```env
 VITE_API_URL=/api
 VITE_SOCKET_URL=https://your-render-backend.onrender.com
 ```
 
-In production, the frontend uses a Vercel rewrite from `/api/*` to the Render backend. Keeping `VITE_API_URL=/api` makes auth requests same-origin from the browser's point of view, which helps HttpOnly cookies work reliably after login.
+Keeping `VITE_API_URL=/api` in production matters: it means the browser treats API calls as "same origin" (thanks to a Vercel rewrite), which makes login cookies work reliably.
 
-## Authentication Flow
+## Login and Auth
 
-PulseBoard uses a full auth system:
+Here's how login works, step by step:
 
-1. **Register**: user creates an account with name, email, and password.
-2. **Email OTP verification**: backend sends a one-time code through Brevo.
-3. **Login**: password is checked with bcrypt, then access and refresh tokens are issued.
-4. **HttpOnly cookies**: tokens are stored in secure cookies instead of localStorage.
-5. **Refresh token rotation**: `/auth/refresh` issues fresh tokens and stores refresh token state.
-6. **Logout**: refresh token is revoked and auth cookies are cleared.
-7. **Forgot/reset password**: backend creates a secure reset token and sends a reset link by email.
-8. **Socket token**: `/auth/socket-token` returns a short-lived JWT used by Socket.io in production cross-origin deployments.
+1. **Register** – user signs up with name, email, and password.
+2. **Verify email** – backend sends a one-time code (OTP) through Brevo.
+3. **Login** – password is checked with bcrypt, then the backend issues an access token and a refresh token.
+4. **HttpOnly cookies** – both tokens are stored in secure cookies instead of localStorage, so they can't be read by JavaScript in the browser.
+5. **Refresh** – `/auth/refresh` gives out new tokens when the old access token expires.
+6. **Logout** – the refresh token is revoked and cookies are cleared.
+7. **Forgot/reset password** – backend creates a secure, one-time reset token and emails a reset link.
+8. **Socket token** – `/auth/socket-token` gives a short-lived token that the frontend uses just for connecting to Socket.io. This is needed because the frontend and backend are on different domains in production.
 
-## Background Email Jobs
+## Background Emails
 
-Email notifications are handled with **BullMQ** and **Redis** so emails do not slow down API responses.
+Notification emails are sent using **BullMQ** and **Redis**, so sending an email never slows down an API response.
 
-Jobs are enqueued when:
+An email job gets queued when:
 
-- a project is created,
+- a new project is created,
 - a member is added to a project,
-- a task is assigned,
-- a task status changes.
+- a task is assigned to someone,
+- a task's status changes.
 
-The worker starts with the backend process and processes the `email-notifications` queue. If Brevo or SMTP is not configured, the email service logs what it would send, which keeps local development easy.
+The background worker runs inside the same backend process and picks up jobs from the `email-notifications` queue. If Brevo or SMTP isn't set up (e.g. during local development), the email service just logs what it would have sent, instead of failing.
 
-## Real-Time Updates
+## Live Board Updates
 
-Socket.io powers live board updates.
+Socket.io keeps the Kanban board in sync across users in real time:
 
-- When a user opens a project board, the client connects to Socket.io and joins a project room.
-- When a task is created, updated, or deleted, the backend emits an event to that room.
-- The frontend updates RTK Query task cache immediately, so all connected users see the latest board state.
-- Redis adapter support allows Socket.io events to work correctly across multiple backend instances.
+- When someone opens a project board, their browser connects to Socket.io and joins a "room" for that project.
+- When a task is created, updated, or deleted, the backend sends an event to everyone in that room.
+- The frontend updates its task list right away, so every connected user sees the change without refreshing.
+- A Redis adapter makes sure this still works correctly even if the backend is running as more than one instance.
 
-The board shows a `Live` / `Offline` indicator so users can see socket connection state.
+The board also shows a small `Live` / `Offline` indicator, so users can tell if their real-time connection is working.
 
-## API Overview
+## API Routes
 
-All API routes are under `/api`.
+All routes start with `/api`.
 
 ### Auth
 
@@ -291,21 +275,21 @@ All API routes are under `/api`.
 - `GET /api/search?q=keyword`
 - `POST /api/projects/:projectId/summary`
 
-Utility:
+### Other
 
-- `GET /health`
-- `GET /api/docs`
-- `GET /api/docs.json`
+- `GET /health` – simple health check
+- `GET /api/docs` – Swagger UI
+- `GET /api/docs.json` – raw OpenAPI spec
 
 ## Search and AI Summary
 
-Search uses PostgreSQL full-text search over task titles and descriptions, scoped to projects where the logged-in user is a member.
+**Search** uses PostgreSQL's full-text search to look through task titles and descriptions. It only searches tasks in projects the logged-in user is actually a member of.
 
-AI summaries use Groq with the configured `GROQ_MODEL`. Results are cached in Redis for faster repeated reads. If `GROQ_API_KEY` is missing, the app returns a deterministic fallback summary based on task counts by status.
+**AI summaries** use Groq, with whichever model is set in `GROQ_MODEL`. Each summary is cached in Redis so repeat requests are fast. If `GROQ_API_KEY` isn't set, the app still returns a summary — just a simple one built from task counts by status, instead of an AI-written one.
 
 ## Testing
 
-Backend tests:
+Run backend tests:
 
 ```powershell
 cd backend
@@ -313,20 +297,20 @@ npm test
 npm run test:coverage
 ```
 
-Notes:
+Good to know:
 
-- Schema/unit tests can run without external services.
-- Integration tests need PostgreSQL running with the configured `DATABASE_URL`.
-- Redis is also expected by the app runtime for sockets, rate limiting, cache, and queues.
+- Some tests (schema/validation tests) don't need any external service.
+- Integration tests need PostgreSQL running, matching your `DATABASE_URL`.
+- The app also expects Redis to be available at runtime, for sockets, rate limiting, caching, and queues.
 
-Frontend build check:
+Current test suites cover: input validation, register/login/duplicate-email/auth-guard flows, and project/task creation with status updates and search.
+
+Check that the frontend and backend both build cleanly:
 
 ```powershell
 cd frontend
 npm run build
 ```
-
-Backend build check:
 
 ```powershell
 cd backend
@@ -335,23 +319,21 @@ npm run build
 
 ## Deployment
 
-The project is designed for:
+This project is set up to deploy as:
 
-- **Frontend**: Vercel
-- **Backend**: Render
-- **Database**: PostgreSQL
-- **Queue/cache/realtime broker**: Redis
+- **Frontend** → Vercel
+- **Backend** → Render
+- **Database** → PostgreSQL
+- **Queue / cache / real-time broker** → Redis
 
-Production environment checklist:
-
-**Vercel**
+### Vercel (frontend) environment variables
 
 ```env
 VITE_API_URL=/api
 VITE_SOCKET_URL=https://your-render-backend.onrender.com
 ```
 
-The frontend should include a Vercel rewrite similar to:
+The frontend should also have a Vercel rewrite, something like this:
 
 ```json
 {
@@ -368,7 +350,7 @@ The frontend should include a Vercel rewrite similar to:
 }
 ```
 
-**Render**
+### Render (backend) environment variables
 
 ```env
 NODE_ENV=production
@@ -383,20 +365,20 @@ GROQ_API_KEY=your_groq_key
 GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
-Brevo requirements:
+### Brevo setup notes
 
-- Use an API key from **SMTP & API -> API Keys**, not an SMTP key. API keys usually start with `xkeysib-`.
-- `MAIL_FROM` must be a verified sender in Brevo.
-- If Brevo blocks an unrecognized IP, add the Render outbound IP shown in the Render error log under Brevo authorized IPs.
+- Use an API key from **SMTP & API → API Keys**, not an SMTP key. Real API keys usually start with `xkeysib-`.
+- `MAIL_FROM` must be a sender address that's verified inside Brevo.
+- If Brevo blocks the server's IP, check the Render error logs for the outbound IP and add it to Brevo's authorized IPs list.
 
-For production cookies to work, the backend must run over HTTPS and `NODE_ENV` should be `production`. If the frontend calls the backend through Vercel's `/api` rewrite, the browser treats auth requests as same-origin and sends the HttpOnly cookies more reliably.
+For login cookies to work correctly in production, the backend must run over HTTPS, and `NODE_ENV` must be `production`. Routing frontend API calls through the Vercel `/api` rewrite (instead of calling Render directly) makes the browser treat these as same-origin requests, which is what makes the HttpOnly cookies reliable.
 
-## Roadmap
+## What's Next
 
-- Drag-and-drop task movement with `dnd-kit`.
-- Invite flow for users who do not have an account yet.
-- More granular project roles such as admin, contributor, and viewer.
-- Activity log / audit trail for project and task changes.
+- Drag-and-drop task movement (likely using `dnd-kit`).
+- Invite flow for people who don't have an account yet.
+- More project roles beyond owner/member — like admin, contributor, and viewer.
+- An activity log / audit trail for project and task changes.
 - File attachments on tasks.
-- More integration test coverage for search, AI, and notifications.
-- Structured logging and monitoring for production observability.
+- More integration tests, especially for search, AI, and notifications.
+- Structured logging and monitoring for production.
